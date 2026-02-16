@@ -11,14 +11,16 @@ st.set_page_config(
 )
 
 # Custom CSS for Mobile
-st.markdown("""
+# Adjusted formatting to avoid string parsing issues in Python 3.13
+style_css = """
 <style>
     .stApp { max-width: 500px; margin: 0 auto; }
     [data-testid="stSidebar"] { background-color: #f8f9fa; }
     .stTabs [data-baseweb="tab-list"] { gap: 8px; }
     .stTabs [data-baseweb="tab"] { padding: 10px; }
 </style>
-""", unsafe_allow_stdio=True)
+"""
+st.markdown(style_css, unsafe_allow_stdio=True)
 
 # Initialize Session State
 if 'history' not in st.session_state:
@@ -40,7 +42,7 @@ def transcribe_audio(audio_bytes):
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Settings")
-    st.write("Version: 1.4.0")
+    st.write("Version: 1.4.1")
     st.markdown("---")
     st.subheader("📱 Mobile")
     st.info("Status: Online")
