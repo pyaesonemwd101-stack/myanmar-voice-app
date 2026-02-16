@@ -1,7 +1,3 @@
 streamlit
 streamlit-mic-recorder
 SpeechRecognition
-2.  **Deploy to Streamlit Cloud:**
-* Go to [Streamlit Community Cloud](https://share.streamlit.io/).
-* Connect your GitHub and select your repository.
-* Click **Deploy**. Your app will be live at a URL like `my-voice-app.streamlit.app`.
