@@ -41,8 +41,8 @@ if 'history' not in st.session_state:
     st.session_state.history = []
 if 'current_text' not in st.session_state:
     st.session_state.current_text = ""
-if 'last_processed_audio' not in st.session_state:
-    st.session_state.last_processed_audio = None
+if 'last_processed_audio_name' not in st.session_state:
+    st.session_state.last_processed_audio_name = None
 
 def transcribe_audio(audio_file):
     """
@@ -72,7 +72,7 @@ def transcribe_audio(audio_file):
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Settings")
-    st.write("Version: 1.7.1")
+    st.write("Version: 1.7.2")
     st.markdown("---")
     st.subheader("💡 Tips for Clarity")
     st.info("""
@@ -95,9 +95,11 @@ with tab1:
     audio_data = st.audio_input("Record your Myanmar speech", key="my_audio_input")
 
     # Only process if we have audio and it's different from the one we just processed
-    if audio_data:
-        # We use the unique ID of the audio file to see if it's new
-        if st.session_state.last_processed_audio != audio_data.id:
+    if audio_data is not None:
+        # Use name or size as a fallback unique identifier if .id fails
+        current_audio_id = getattr(audio_data, 'id', getattr(audio_data, 'name', str(audio_data.size)))
+        
+        if st.session_state.last_processed_audio_name != current_audio_id:
             with st.spinner("Converting to Myanmar text..."):
                 result = transcribe_audio(audio_data)
                 
@@ -105,20 +107,19 @@ with tab1:
                     st.error(result)
                 else:
                     st.session_state.current_text = result
-                    st.session_state.last_processed_audio = audio_data.id
+                    st.session_state.last_processed_audio_name = current_audio_id
                     st.success("Converted successfully!")
 
     # LIVE VERIFICATION & EDITING
     if st.session_state.current_text:
         st.markdown("### 📝 Check & Edit Text")
         
-        # Use st.session_state directly in the text_area to ensure edits persist 
-        # but also allow clearing.
+        # Use st.session_state directly in the text_area
         st.session_state.current_text = st.text_area(
             "Correct the text if needed:", 
             value=st.session_state.current_text, 
             height=200,
-            key="verify_text_area_v2"
+            key="verify_text_area_v3"
         )
         
         # Copy to Clipboard Button
@@ -128,8 +129,8 @@ with tab1:
         
         if st.button("🗑️ Clear Everything", use_container_width=True):
             st.session_state.current_text = ""
-            # Important: Clear the last processed ID so the next recording can run
-            st.session_state.last_processed_audio = None
+            # Reset processing state so the user can re-record or process a new one
+            st.session_state.last_processed_audio_name = None
             st.rerun()
 
 with tab2:
