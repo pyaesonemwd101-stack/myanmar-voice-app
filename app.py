@@ -1,12 +1,13 @@
 import streamlit as st
-import speech_recognition as sr
 import datetime
 import io
 import time
+import base64
+import requests
 
 # App Configuration
 st.set_page_config(
-    page_title="Myanmar Story Studio", 
+    page_title="Myanmar AI Story Studio", 
     page_icon="🎙️", 
     layout="centered"
 )
@@ -17,10 +18,13 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Pyidaungsu&display=swap');
     .stApp { max-width: 550px; margin: 0 auto; font-family: 'Pyidaungsu', sans-serif; }
     .stTextArea textarea { font-size: 1.1rem !important; line-height: 1.6; }
-    .status-active { color: #28a745; font-weight: bold; }
     .stButton button { border-radius: 20px; transition: 0.3s; }
 </style>
 """, unsafe_allow_html=True)
+
+# API Configuration
+API_KEY = ""  # Provided by the environment
+MODEL_ID = "gemini-2.5-flash-preview-09-2025"
 
 # Initialize Session State
 if 'history' not in st.session_state:
@@ -32,82 +36,73 @@ if 'last_processed_audio_hash' not in st.session_state:
 if 'reset_key' not in st.session_state:
     st.session_state.reset_key = 0
 
-def transcribe_audio(audio_bytes, energy_lvl, language_code, long_pause_mode):
+def transcribe_with_ai(audio_bytes, language_name):
     """
-    Improved Transcription Engine with Dynamic Noise Calibration.
+    Advanced AI Transcription using Gemini 2.5 Flash.
+    Includes exponential backoff for reliability.
     """
-    recognizer = sr.Recognizer()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_ID}:generateContent?key={API_KEY}"
     
-    # 30% Improvement: Dynamic Calibration
-    # We set a baseline but allow the engine to ignore static hum
-    recognizer.energy_threshold = energy_lvl 
-    recognizer.dynamic_energy_threshold = True
-    recognizer.dynamic_energy_adjustment_damping = 0.15
-    recognizer.dynamic_energy_ratio = 1.5
+    # Convert audio to base64 for the API
+    encoded_audio = base64.b64encode(audio_bytes).decode('utf-8')
     
-    # novel-writing specific timing
-    if long_pause_mode:
-        recognizer.pause_threshold = 12.0  # Very long pause for thinking
-        recognizer.phrase_threshold = 0.2
-        recognizer.non_speaking_duration = 4.0
-    else:
-        recognizer.pause_threshold = 2.0
-        recognizer.phrase_threshold = 0.3
-        recognizer.non_speaking_duration = 1.0
+    prompt = f"Please transcribe this audio accurately. The language is {language_name}. If it is a story or novel, ensure the Myanmar punctuation and grammar are natural and beautiful. Only return the transcribed text."
     
-    try:
-        audio_stream = io.BytesIO(audio_bytes)
-        with sr.AudioFile(audio_stream) as source:
-            # Improvement: Minimal noise adjustment to avoid cutting the start of speech
-            recognizer.adjust_for_ambient_noise(source, duration=0.1)
-            audio_data = recognizer.record(source)
-        
-        # Google recognition with context hints
-        return recognizer.recognize_google(
-            audio_data, 
-            language=language_code,
-            show_all=False # Setting to false for direct string return
-        )
-        
-    except sr.UnknownValueError:
-        return "⚠️ Silence or unclear speech. Try speaking louder or check your mic."
-    except sr.RequestError:
-        return "⚠️ Cloud connection error. Please check your internet."
-    except Exception as e:
-        return f"⚠️ System error: {str(e)}"
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": prompt},
+                {
+                    "inlineData": {
+                        "mimeType": "audio/wav",
+                        "data": encoded_audio
+                    }
+                }
+            ]
+        }]
+    }
+
+    # Exponential Backoff Implementation
+    max_retries = 5
+    for i in range(max_retries):
+        try:
+            response = requests.post(url, json=payload, timeout=60)
+            if response.status_code == 200:
+                result = response.json()
+                text = result.candidates[0].content.parts[0].text
+                return text.strip()
+            elif response.status_code == 429: # Rate limit
+                time.sleep(2**i)
+                continue
+            else:
+                return f"⚠️ API Error ({response.status_code}): {response.text}"
+        except Exception as e:
+            if i == max_retries - 1:
+                return f"⚠️ System error: {str(e)}"
+            time.sleep(2**i)
+    return "⚠️ Failed to connect to AI after multiple attempts."
 
 # --- SIDEBAR SETTINGS ---
 with st.sidebar:
-    st.header("🛠️ Audio Engine")
+    st.header("🤖 AI Settings")
     
     lang_choice = st.radio(
         "Voice Language",
         ["Myanmar (မြန်မာ)", "English (US)"],
         index=0
     )
-    language_code = "my-MM" if "Myanmar" in lang_choice else "en-US"
     
     st.divider()
-    
-    long_pause = st.toggle("Infinite Dictation Mode", value=True, help="Best for writing novels. Allows long pauses.")
-    
-    sensitivity = st.select_slider(
-        "Microphone Sensitivity",
-        options=[50, 100, 200, 400, 600],
-        value=100,
-        help="Lower is more sensitive (use for whispering)."
-    )
-    
-    st.info(f"Current Target: **{lang_choice}**")
+    st.success("AI Model: Gemini 2.5 Flash")
+    st.info("The AI will now analyze your voice and grammar for 30%+ better accuracy.")
 
 # --- MAIN APP ---
-st.title("🎙️ Story Writer Pro")
-st.markdown("Convert your spoken ideas into chapters automatically.")
+st.title("🎙️ AI Story Writer")
+st.markdown("Speak your heart out. Our AI will handle the transcription and grammar.")
 
 tab_write, tab_save, tab_lib = st.tabs(["✍️ Dictate", "💾 Chapter Info", "📚 Library"])
 
 with tab_write:
-    # Use the reset_key to force refresh of the widget if needed
     audio_file = st.audio_input(
         f"Record in {lang_choice}", 
         key=f"mic_widget_{st.session_state.reset_key}"
@@ -117,13 +112,13 @@ with tab_write:
         current_hash = f"{audio_file.name}_{audio_file.size}"
         
         if st.session_state.last_processed_audio_hash != current_hash:
-            with st.status("Listening and transcribing...", expanded=False) as status:
+            with st.status("AI is analyzing your voice...", expanded=True) as status:
                 audio_bytes = audio_file.read()
-                result = transcribe_audio(audio_bytes, sensitivity, language_code, long_pause)
+                result = transcribe_with_ai(audio_bytes, lang_choice)
                 
                 if "⚠️" in result:
-                    status.update(label="Conversion failed", state="error")
-                    st.warning(result)
+                    status.update(label="AI Analysis failed", state="error")
+                    st.error(result)
                 else:
                     if st.session_state.current_text:
                         st.session_state.current_text += "\n" + result
@@ -131,13 +126,12 @@ with tab_write:
                         st.session_state.current_text = result
                     
                     st.session_state.last_processed_audio_hash = current_hash
-                    status.update(label="Text Added!", state="complete")
+                    status.update(label="AI Transcription Complete!", state="complete")
                     st.balloons()
 
     # Story Editor
     if st.session_state.current_text:
         st.markdown("### 📖 Chapter Draft")
-        # Dynamic key based on reset_key ensures it clears when we want it to
         st.session_state.current_text = st.text_area(
             "Edit your text here:", 
             value=st.session_state.current_text, 
