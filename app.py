@@ -23,7 +23,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # API Configuration
-API_KEY = ""  # Provided by the environment
+API_KEY = ""  # Environment handles the key automatically
 MODEL_ID = "gemini-2.5-flash-preview-09-2025"
 
 # Initialize Session State
@@ -38,12 +38,13 @@ if 'reset_key' not in st.session_state:
 
 def transcribe_with_ai(audio_bytes, language_name):
     """
-    Advanced AI Transcription using Gemini 2.5 Flash.
+    Advanced AI Transcription using Gemini 2.5 Flash via the environment-compliant endpoint.
     Includes exponential backoff for reliability.
     """
+    # Use the official endpoint format for the preview environment
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_ID}:generateContent?key={API_KEY}"
     
-    # Convert audio to base64 for the API
+    # Convert audio to base64
     encoded_audio = base64.b64encode(audio_bytes).decode('utf-8')
     
     prompt = f"Please transcribe this audio accurately. The language is {language_name}. If it is a story or novel, ensure the Myanmar punctuation and grammar are natural and beautiful. Only return the transcribed text."
@@ -66,20 +67,29 @@ def transcribe_with_ai(audio_bytes, language_name):
     max_retries = 5
     for i in range(max_retries):
         try:
-            response = requests.post(url, json=payload, timeout=60)
+            # Note: The environment automatically handles authentication when API_KEY is empty
+            response = requests.post(url, json=payload, timeout=90)
+            
             if response.status_code == 200:
                 result = response.json()
-                text = result.candidates[0].content.parts[0].text
-                return text.strip()
+                # Check for content in the response
+                if 'candidates' in result and len(result['candidates']) > 0:
+                    text = result['candidates'][0]['content']['parts'][0]['text']
+                    return text.strip()
+                else:
+                    return "⚠️ AI could not find speech in this recording."
             elif response.status_code == 429: # Rate limit
                 time.sleep(2**i)
                 continue
+            elif response.status_code == 403:
+                return "⚠️ API Access Denied (403). Please ensure the application has the correct permissions to call Gemini."
             else:
                 return f"⚠️ API Error ({response.status_code}): {response.text}"
         except Exception as e:
             if i == max_retries - 1:
                 return f"⚠️ System error: {str(e)}"
             time.sleep(2**i)
+            
     return "⚠️ Failed to connect to AI after multiple attempts."
 
 # --- SIDEBAR SETTINGS ---
