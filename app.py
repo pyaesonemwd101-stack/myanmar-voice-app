@@ -20,7 +20,8 @@ style_css = """
     .stTabs [data-baseweb="tab"] { padding: 10px; }
 </style>
 """
-st.markdown(style_css, unsafe_allow_stdio=True)
+# Fixed: Changed unsafe_allow_stdio to unsafe_allow_html
+st.markdown(style_css, unsafe_allow_html=True)
 
 # Initialize Session State
 if 'history' not in st.session_state:
