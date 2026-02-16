@@ -41,6 +41,8 @@ if 'history' not in st.session_state:
     st.session_state.history = []
 if 'current_text' not in st.session_state:
     st.session_state.current_text = ""
+if 'last_processed_audio' not in st.session_state:
+    st.session_state.last_processed_audio = None
 
 def transcribe_audio(audio_file):
     """
@@ -70,7 +72,7 @@ def transcribe_audio(audio_file):
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Settings")
-    st.write("Version: 1.7.0")
+    st.write("Version: 1.7.1")
     st.markdown("---")
     st.subheader("💡 Tips for Clarity")
     st.info("""
@@ -89,43 +91,45 @@ tab1, tab2, tab3 = st.tabs(["🔴 Record", "💾 Save", "📂 History"])
 with tab1:
     st.write("Record your voice below:")
     
-    # Using the native Streamlit audio_input for better compatibility
-    audio_data = st.audio_input("Record your Myanmar speech")
+    # Using the native Streamlit audio_input
+    audio_data = st.audio_input("Record your Myanmar speech", key="my_audio_input")
 
+    # Only process if we have audio and it's different from the one we just processed
     if audio_data:
-        # The built-in widget returns a file-like object that works well with sr.AudioFile
-        with st.spinner("Converting to Myanmar text..."):
-            result = transcribe_audio(audio_data)
-            
-            if "Error:" in result:
-                st.error(result)
-            else:
-                st.session_state.current_text = result
-                st.success("Converted successfully!")
+        # We use the unique ID of the audio file to see if it's new
+        if st.session_state.last_processed_audio != audio_data.id:
+            with st.spinner("Converting to Myanmar text..."):
+                result = transcribe_audio(audio_data)
+                
+                if "Error:" in result:
+                    st.error(result)
+                else:
+                    st.session_state.current_text = result
+                    st.session_state.last_processed_audio = audio_data.id
+                    st.success("Converted successfully!")
 
     # LIVE VERIFICATION & EDITING
     if st.session_state.current_text:
         st.markdown("### 📝 Check & Edit Text")
-        edited_text = st.text_area(
+        
+        # Use st.session_state directly in the text_area to ensure edits persist 
+        # but also allow clearing.
+        st.session_state.current_text = st.text_area(
             "Correct the text if needed:", 
             value=st.session_state.current_text, 
             height=200,
-            key="verify_text_area"
+            key="verify_text_area_v2"
         )
-        st.session_state.current_text = edited_text
         
         # Copy to Clipboard Button
-        # We use a trick with st.code because it has a built-in copy button, 
-        # or we can use a custom button with a toast.
         if st.button("📋 Copy All Text", use_container_width=True):
-            # Streamlit doesn't have a direct "copy to clipboard" function, 
-            # but users can copy from a text area or st.code easily.
-            # We will show a success message and use a dedicated UI element.
             st.toast("Text ready for copying!")
             st.code(st.session_state.current_text, language=None)
         
         if st.button("🗑️ Clear Everything", use_container_width=True):
             st.session_state.current_text = ""
+            # Important: Clear the last processed ID so the next recording can run
+            st.session_state.last_processed_audio = None
             st.rerun()
 
 with tab2:
@@ -161,6 +165,5 @@ with tab3:
         for i, item in enumerate(reversed(st.session_state.history)):
             with st.expander(f"📄 {item['name']} ({item['time']})"):
                 st.write(item['content'])
-                # Add copy option for historical notes too
                 if st.button(f"📋 Copy This Note", key=f"copy_{i}"):
                     st.code(item['content'], language=None)
