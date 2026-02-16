@@ -47,7 +47,7 @@ if 'last_processed_audio_hash' not in st.session_state:
 def transcribe_audio(audio_bytes, energy_lvl, is_story_mode):
     """
     Enhanced Transcription Engine optimized for Long-form Content.
-    Processes raw bytes from st.audio_input.
+    Processes raw bytes from st.audio_input with max duration support.
     """
     recognizer = sr.Recognizer()
     
@@ -56,11 +56,12 @@ def transcribe_audio(audio_bytes, energy_lvl, is_story_mode):
     
     # Adjust thresholds for long-form dictation
     if is_story_mode:
-        recognizer.pause_threshold = 3.0  
-        recognizer.phrase_threshold = 0.5
-        recognizer.non_speaking_duration = 1.5
+        # Very generous settings for storytelling
+        recognizer.pause_threshold = 5.0  # Allow 5 seconds of silence
+        recognizer.phrase_threshold = 0.3
+        recognizer.non_speaking_duration = 2.0
     else:
-        recognizer.pause_threshold = 1.2
+        recognizer.pause_threshold = 1.5
         recognizer.phrase_threshold = 0.3
         recognizer.non_speaking_duration = 0.8
     
@@ -69,16 +70,16 @@ def transcribe_audio(audio_bytes, energy_lvl, is_story_mode):
         audio_stream = io.BytesIO(audio_bytes)
         
         with sr.AudioFile(audio_stream) as source:
-            # Calibrate for ambient noise
-            recognizer.adjust_for_ambient_noise(source, duration=0.5)
-            # Record the entire file
+            # Calibrate for ambient noise quickly to avoid losing speech
+            recognizer.adjust_for_ambient_noise(source, duration=0.3)
+            # Record everything from the start to the end of the provided audio
             audio_data = recognizer.record(source)
         
         # Global Speech API with my-MM locale
         return recognizer.recognize_google(audio_data, language="my-MM")
         
     except sr.UnknownValueError:
-        return "Error: Speech unclear. Tips: Speak slower, stay close to mic, or lower 'Energy Threshold'."
+        return "Error: Speech unclear. Tips: Try speaking closer to the mic or speak slightly louder."
     except sr.RequestError:
         return "Error: Connection lost. Google Speech API is unavailable."
     except Exception as e:
@@ -87,24 +88,24 @@ def transcribe_audio(audio_bytes, energy_lvl, is_story_mode):
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Settings")
-    st.write("Version: 1.9.1")
+    st.write("Version: 1.9.2")
     
     st.subheader("📝 Mode Selection")
-    story_mode = st.toggle("Story Mode (Long Dictation)", value=True, help="Enable this for writing novels or long ideas.")
+    story_mode = st.toggle("Story Mode (Long Dictation)", value=True, help="Enable this for writing novels. It ignores long pauses.")
     
     st.subheader("🎤 Voice Calibration")
     energy_lvl = st.slider(
         "Sensitivity (Energy)", 
-        50, 1000, 200, 
-        help="Lower this for quiet storytelling."
+        50, 1000, 150, 
+        help="Lower = More sensitive. Set to 150 or 100 for quiet storytelling."
     )
     
     st.markdown("---")
     st.subheader("💡 Storytelling Tips")
     st.info("""
-    - **Long Pauses:** Story Mode allows up to 3 seconds of silence.
-    - **Wait:** Give it a moment to upload and process after you stop recording.
-    - **Manual Edit:** You can always fix small mistakes in the text box below.
+    - **Long Chapters:** Speak your story. The app will capture it all and add it to the draft below.
+    - **Wait for Processing:** After you stop, wait 2-3 seconds for the AI to "read" the whole audio.
+    - **Append:** New recordings are added to the end of your current story.
     """)
 
 # --- MAIN UI ---
@@ -120,7 +121,7 @@ with tab1:
     audio_file = st.audio_input("Press the mic to start your story", key="my_audio_input")
 
     if audio_file is not None:
-        # Create a unique hash for the current audio to prevent infinite loops
+        # Create a unique hash for the current audio
         current_audio_hash = f"{audio_file.name}_{audio_file.size}"
         
         if st.session_state.last_processed_audio_hash != current_audio_hash:
@@ -135,12 +136,12 @@ with tab1:
                 else:
                     # Append new text to the existing draft
                     if st.session_state.current_text:
-                        st.session_state.current_text += "\n\n" + result
+                        st.session_state.current_text += "\n" + result
                     else:
                         st.session_state.current_text = result
                         
                     st.session_state.last_processed_audio_hash = current_audio_hash
-                    st.success("Added to draft!")
+                    st.success("Successfully added to story!")
 
     if st.session_state.current_text:
         st.markdown("### 📝 Story Draft")
