@@ -70,7 +70,7 @@ def transcribe_audio(audio_file):
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Settings")
-    st.write("Version: 1.6.0")
+    st.write("Version: 1.7.0")
     st.markdown("---")
     st.subheader("💡 Tips for Clarity")
     st.info("""
@@ -82,7 +82,7 @@ with st.sidebar:
 
 # --- MAIN UI ---
 st.title("🎤 Myanmar Voice")
-st.caption("Advanced Speech-to-Text with Format Fix")
+st.caption("Advanced Speech-to-Text with Copy Feature")
 
 tab1, tab2, tab3 = st.tabs(["🔴 Record", "💾 Save", "📂 History"])
 
@@ -113,6 +113,16 @@ with tab1:
             key="verify_text_area"
         )
         st.session_state.current_text = edited_text
+        
+        # Copy to Clipboard Button
+        # We use a trick with st.code because it has a built-in copy button, 
+        # or we can use a custom button with a toast.
+        if st.button("📋 Copy All Text", use_container_width=True):
+            # Streamlit doesn't have a direct "copy to clipboard" function, 
+            # but users can copy from a text area or st.code easily.
+            # We will show a success message and use a dedicated UI element.
+            st.toast("Text ready for copying!")
+            st.code(st.session_state.current_text, language=None)
         
         if st.button("🗑️ Clear Everything", use_container_width=True):
             st.session_state.current_text = ""
@@ -151,3 +161,6 @@ with tab3:
         for i, item in enumerate(reversed(st.session_state.history)):
             with st.expander(f"📄 {item['name']} ({item['time']})"):
                 st.write(item['content'])
+                # Add copy option for historical notes too
+                if st.button(f"📋 Copy This Note", key=f"copy_{i}"):
+                    st.code(item['content'], language=None)
